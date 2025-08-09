@@ -2,6 +2,10 @@ import pygame
 import sys
 import random
 import numpy as np
+from gomoku import Gomoku
+from alpha_beta_search import MinmaxSearch
+import threading
+import copy
 
 # ==================== 1. 游戏设置与常量 ====================
 # 窗口设置
@@ -35,75 +39,6 @@ except FileNotFoundError:
     font = pygame.font.Font(None, 40)
 
 running = True
-
-
-# ==================== 2. 游戏核心逻辑 ====================
-class Gomoku:
-    def __init__(self):
-        self.board = np.zeros((BOARD_SIZE, BOARD_SIZE))
-        self.current_player = 1
-        self.game_over = False
-        self.winner = None
-        self.last_move = None
-
-    def reset_game(self):
-        self.board = np.zeros((BOARD_SIZE, BOARD_SIZE))
-        self.current_player = 1
-        self.game_over = False
-        self.winner = None
-        self.last_move = None
-
-    def is_valid_move(self, row, col):
-        return (
-            0 <= row < BOARD_SIZE
-            and 0 <= col < BOARD_SIZE
-            and self.board[row][col] == 0
-        )
-
-    def make_move(self, row, col):
-        if self.is_valid_move(row, col):
-            self.board[row][col] = self.current_player
-            self.last_move = (row, col)
-            if self.check_win(row, col):
-                self.game_over = True
-                self.winner = self.current_player
-            else:
-                self.current_player = 3 - self.current_player
-            return True
-        return False
-
-    def undo_move(self, row: int, col: int):
-        assert self.is_valid_move(row, col), f"({row}, {col}) is invalid position!"
-        self.board[row][col] = 0
-
-    def check_win(self, row, col):
-        player = self.board[row][col]
-        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
-        for dr, dc in directions:
-            count = 1
-            for i in range(1, 5):
-                r, c = row + i * dr, col + i * dc
-                if (
-                    0 <= r < BOARD_SIZE
-                    and 0 <= c < BOARD_SIZE
-                    and self.board[r][c] == player
-                ):
-                    count += 1
-                else:
-                    break
-            for i in range(1, 5):
-                r, c = row - i * dr, col - i * dc
-                if (
-                    0 <= r < BOARD_SIZE
-                    and 0 <= c < BOARD_SIZE
-                    and self.board[r][c] == player
-                ):
-                    count += 1
-                else:
-                    break
-            if count >= 5:
-                return True
-        return False
 
 
 # ==================== 3. AI逻辑 ====================
@@ -203,17 +138,22 @@ def show_game_menu():
 def main():
     global running
     game = Gomoku()
-    ai = AI()
+    ai = MinmaxSearch()
     game_mode = 0
     mouse_pos = None
 
+    ai_move_result = None
+    ai_thread = None
+
+    def ai_worker(game_copy):
+        nonlocal ai_move_result
+        ai_move_result = ai.minmax(depth=6, game=game_copy)
+
     while running:
-        # 优化：主循环中统一处理事件
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
-            # 在菜单模式下，只响应键盘输入
             if game_mode == 0:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_1:
@@ -222,8 +162,6 @@ def main():
                     elif event.key == pygame.K_2:
                         game_mode = 2
                         game.reset_game()
-
-            # 在游戏模式下，响应鼠标和键盘输入
             else:
                 if event.type == pygame.MOUSEMOTION:
                     mouse_pos = pygame.mouse.get_pos()
@@ -233,6 +171,13 @@ def main():
                         col = round((pos[0] - MARGIN) / CELL_SIZE)
                         row = round((pos[1] - MARGIN) / CELL_SIZE)
                         game.make_move(row, col)
+                        draw_board(
+                            screen,
+                            game.board,
+                            game.last_move,
+                            mouse_pos,
+                            game.current_player,
+                        )
                 elif event.type == pygame.KEYDOWN and game.game_over:
                     game.reset_game()
                     game_mode = 0
@@ -240,9 +185,19 @@ def main():
         if game_mode == 0:
             show_game_menu()
         else:
+            # AI线程启动与结果处理
             if game_mode == 2 and game.current_player == 2 and not game.game_over:
-                row, col = ai.get_random_move(game.board)
-                game.make_move(row, col)
+                if ai_thread is None or not ai_thread.is_alive():
+                    if ai_move_result is None:
+                        game_copy = copy.deepcopy(game)
+                        ai_thread = threading.Thread(
+                            target=ai_worker, args=(game_copy,), daemon=True
+                        )
+                        ai_thread.start()
+                if ai_move_result is not None:
+                    row, col = ai_move_result
+                    game.make_move(row, col)
+                    ai_move_result = None
 
             draw_board(
                 screen, game.board, game.last_move, mouse_pos, game.current_player
@@ -263,6 +218,14 @@ def main():
                 )
                 draw_text(current_player_text, (10, 10))
 
+                # AI思考中提示
+                if (
+                    game_mode == 2
+                    and game.current_player == 2
+                    and ai_thread is not None
+                    and ai_thread.is_alive()
+                ):
+                    draw_text("AI思考中...", (WINDOW_WIDTH - 200, WINDOW_HEIGHT - 50))
             pygame.display.flip()
 
     pygame.quit()

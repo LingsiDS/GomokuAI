@@ -1,5 +1,5 @@
 import re
-from run import Gomoku
+from gomoku import Gomoku
 import numpy as np
 from enum import IntEnum
 from typing import List
@@ -65,12 +65,12 @@ white_patterns = {
 
 
 scores = {
-    BoardPattern.FIVE: 1e9,
-    BoardPattern.OPEN_FOUR: 10000,
-    BoardPattern.BLOCKED_FOUR: 1000,
-    BoardPattern.OPEN_THREE: 1000,
+    BoardPattern.FIVE: 8e9,
+    BoardPattern.OPEN_FOUR: 20000,
+    BoardPattern.BLOCKED_FOUR: 5000,
+    BoardPattern.OPEN_THREE: 3000,
     BoardPattern.BLOCKED_THREE: 100,
-    BoardPattern.OPEN_TWO: 100,
+    BoardPattern.OPEN_TWO: 300,
 }
 
 
@@ -96,14 +96,24 @@ class GomokuEval:
     @staticmethod
     def evaluate(game: Gomoku):
         """Evaluate the game state and return a score."""
+        print(f"eval: {game.current_player}")
         state_strs = GomokuEval.get_board_lines(game.board)
-        board_patterns = black_patterns if game.current_player == 1 else white_patterns
+        own_patterns, opp_patterns = (
+            (black_patterns, white_patterns)
+            if game.current_player == 1
+            else (white_patterns, black_patterns)
+        )
+        own_patterns, opp_patterns = (white_patterns, black_patterns)
         game_score = 0
         for state in state_strs:
-            for pattern, regexs in board_patterns.items():
+            for pattern, regexs in own_patterns.items():
+                for regex in regexs:
+                    if re.search(regex, state):  # TODO: 多次加分
+                        game_score += scores[pattern]
+            for pattern, regexs in opp_patterns.items():
                 for regex in regexs:
                     if re.search(regex, state):
-                        game_score += scores[pattern]
+                        game_score -= scores[pattern]
         return game_score
 
     @staticmethod
@@ -128,11 +138,10 @@ class GomokuEval:
             if visited[t[0]][t[1]] == 1:
                 continue
             visited[t[0]][t[1]] = 1
-            for x in x_direc:
-                for y in y_direc:
-                    nx, ny = t[0] + x, t[1] + y
-                    if 0 <= nx < BOARD_SIZE and 0 <= ny < BOARD_SIZE:
-                        visited[nx][ny] = 1
-                        if game.board[nx][ny] == 0:
-                            moves.append((nx, ny))
+            for x, y in zip(x_direc, y_direc):
+                nx, ny = t[0] + x, t[1] + y
+                if 0 <= nx < BOARD_SIZE and 0 <= ny < BOARD_SIZE:
+                    visited[nx][ny] = 1
+                    if game.board[nx][ny] == 0:
+                        moves.append((nx, ny))
         return moves
