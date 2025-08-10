@@ -7,6 +7,7 @@ import queue
 
 
 class BoardPattern(IntEnum):
+    DUMMY = 0
     FIVE = 1
     OPEN_FOUR = 2
     BLOCKED_FOUR = 3
@@ -29,6 +30,7 @@ def pattern2str(pattern: IntEnum):
 
 # TODO: pattern需要细化，以及得分需要细化，同时应该考虑防守
 black_patterns = {
+    # BoardPattern.DUMMY: [""],
     BoardPattern.FIVE: ["11111"],
     BoardPattern.OPEN_FOUR: ["011110"],  # 活四：己方下一手必成五连
     BoardPattern.BLOCKED_FOUR: [
@@ -44,6 +46,7 @@ black_patterns = {
 }
 
 white_patterns = {
+    # BoardPattern.DUMMY: [""],
     BoardPattern.FIVE: ["22222"],  # 白棋五连
     BoardPattern.OPEN_FOUR: ["022220"],  # 白棋活四：两端有空位，下一手必成五
     BoardPattern.BLOCKED_FOUR: [
@@ -90,7 +93,7 @@ class GomokuEval:
         ]
 
         lines = rows + cols + diags + anti_diags
-        lines = ["".join(x.astype(str)) for x in lines]
+        lines = ["".join(x.astype(int).astype(str)) for x in lines]
         return lines
 
     @staticmethod
@@ -103,7 +106,7 @@ class GomokuEval:
             if game.current_player == 1
             else (white_patterns, black_patterns)
         )
-        own_patterns, opp_patterns = (white_patterns, black_patterns)
+        # own_patterns, opp_patterns = (white_patterns, black_patterns)
         game_score = 0
         for state in state_strs:
             for pattern, regexs in own_patterns.items():
@@ -113,7 +116,9 @@ class GomokuEval:
             for pattern, regexs in opp_patterns.items():
                 for regex in regexs:
                     if re.search(regex, state):
-                        game_score -= scores[pattern]
+                        game_score -= (
+                            scores[pattern] * 2.1
+                        )  # 对手的棋形权重增加，让AI注重防守
         return game_score
 
     @staticmethod
