@@ -13,7 +13,7 @@ class MinmaxSearch:
             return GomokuEval.evaluate(self.game), None
 
         value, move = float("-inf"), None
-        next_moves = GomokuEval.generate_moves(self.game)
+        next_moves = GomokuEval.generate_sorted_moves(self.game)
         for next_move in next_moves:
             self.game.make_move(next_move[0], next_move[1])
             val, mv = self.min_value(depth - 1, alpha, beta)
@@ -28,9 +28,9 @@ class MinmaxSearch:
     def min_value(self, depth: int, alpha: float, beta: float):
         """Min value function for minimax algorithm."""
         if self.game.game_over or depth == 0:
-            return GomokuEval.evaluate(self.game), None, float("-inf"), float("inf")
+            return GomokuEval.evaluate(self.game), None
 
-        next_moves = GomokuEval.generate_moves(self.game)
+        next_moves = GomokuEval.generate_sorted_moves(self.game)
         value, move = float("inf"), None
         for next_move in next_moves:
             self.game.make_move(next_move[0], next_move[1])

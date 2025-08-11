@@ -147,7 +147,7 @@ def main():
 
     def ai_worker(game_copy):
         nonlocal ai_move_result
-        ai_move_result = ai.minmax(depth=6, game=game_copy)
+        ai_move_result = ai.minmax(depth=4, game=game_copy)
 
     while running:
         for event in pygame.event.get():

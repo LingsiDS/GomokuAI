@@ -4,6 +4,7 @@ import numpy as np
 from enum import IntEnum
 from typing import List
 import queue
+from collections import defaultdict
 
 
 class BoardPattern(IntEnum):
@@ -14,6 +15,10 @@ class BoardPattern(IntEnum):
     OPEN_THREE = 4
     BLOCKED_THREE = 5
     OPEN_TWO = 6
+    DOUBLE_OPEN_THREE = 7
+    DOUBLE_BLOCKED_FOUR = 8
+    FOUR_THREE = 9  # 四三杀,一条线是活四，另一条是活三
+    DOUBLE_OPEN_FOUR = 10  # 双活四
 
 
 def pattern2str(pattern: IntEnum):
@@ -24,6 +29,10 @@ def pattern2str(pattern: IntEnum):
         4: "OPEN_THREE",
         5: "BLOCKED_THREE",
         6: "OPEN_TWO",
+        7: "DOUBLE_OPEN_THREE",
+        8: "DOUBLE_BLOCKED_FOUR",
+        9: "FOUR_THREE",
+        10: "DOUBLE_OPEN_FOUR",
     }
     return dic[pattern]
 
@@ -74,6 +83,10 @@ scores = {
     BoardPattern.OPEN_THREE: 3000,
     BoardPattern.BLOCKED_THREE: 100,
     BoardPattern.OPEN_TWO: 300,
+    BoardPattern.DOUBLE_OPEN_THREE: 15000,  # 分数仅次于活四，优先活四
+    BoardPattern.DOUBLE_BLOCKED_FOUR: 20000,  # 基本必杀局
+    BoardPattern.FOUR_THREE: 25000,  # 四三杀
+    BoardPattern.DOUBLE_OPEN_FOUR: 50000,  # 双活四
 }
 
 
@@ -99,7 +112,7 @@ class GomokuEval:
     @staticmethod
     def evaluate(game: Gomoku):
         """Evaluate the game state and return a score."""
-        print(f"eval: {game.current_player}")
+        # print(f"eval: {game.current_player}")
         state_strs = GomokuEval.get_board_lines(game.board)
         own_patterns, opp_patterns = (
             (black_patterns, white_patterns)
@@ -149,4 +162,117 @@ class GomokuEval:
                     visited[nx][ny] = 1
                     if game.board[nx][ny] == 0:
                         moves.append((nx, ny))
+        return moves
+
+    @staticmethod
+    def generate_sorted_moves(game: Gomoku):
+        moves = []
+        BOARD_SIZE = 15
+        candidates = []
+        # for i in range(BOARD_SIZE):
+        #     for j in range(BOARD_SIZE):
+        #         if game.board[i][j] == 0:
+        #             candidates.append((i, j))
+        candidates = GomokuEval.generate_moves(game)
+
+        def is_validate(x, y):
+            if 0 <= x < BOARD_SIZE and 0 <= y < BOARD_SIZE:
+                return True
+            return False
+
+        def check_pattern(x, y, dx, dy, current_player):
+            pattern = defaultdict(int)
+            nx, ny = x + dx, y + dy
+            left_cnt, right_cnt = 0, 0
+            is_left_open, is_right_open = False, False
+
+            while is_validate(nx, ny) and game.board[nx][ny] == current_player:
+                nx, ny = nx + dx, ny + dy
+                left_cnt += 1
+            is_left_open = is_validate(nx, ny) and game.board[nx][ny] == 0
+
+            nx, ny = x - dx, y - dy
+            while is_validate(nx, ny) and game.board[nx][ny] == current_player:
+                nx, ny = nx - dx, ny - dy
+                right_cnt += 1
+            is_right_open = is_validate(nx, ny) and game.board[nx][ny] == 0
+
+            # check pattern, calc score
+            if left_cnt + right_cnt + 1 >= 5:
+                pattern[BoardPattern.FIVE] += 1
+            elif left_cnt + right_cnt + 1 == 4 and is_left_open and is_right_open:
+                pattern[BoardPattern.OPEN_FOUR] += 1
+            elif (
+                left_cnt + right_cnt + 1 == 4
+                and (is_left_open or is_right_open)
+                and (left_cnt == 0 or right_cnt == 0)
+            ):  # 单边开，且一边为0，冲四
+                pattern[BoardPattern.BLOCKED_FOUR] += 1
+            elif left_cnt + right_cnt + 1 == 3 and is_left_open and is_right_open:
+                pattern[BoardPattern.OPEN_THREE] += 1
+            elif left_cnt + right_cnt + 1 == 3 and (is_left_open or is_right_open):
+                pattern[BoardPattern.BLOCKED_THREE] += 1
+            elif left_cnt + right_cnt + 1 == 2 and is_left_open and is_right_open:
+                pattern[BoardPattern.OPEN_TWO] += 1
+
+            return pattern
+
+        def calc_scores(pattern: defaultdict):
+            score = 0
+            n = len(pattern)
+            if n == 1:  # 只有一种模式，可以是单个模式，也可以是双活甚至多活
+                for key, value in pattern.items():
+                    if value == 1 and n == 1:  # 单个模式的分数，直接加
+                        score += scores[key]
+                    elif value > 1:  # TODO：双活甚至多活，需要精细优化
+                        if key == BoardPattern.OPEN_THREE and value >= 2:
+                            score += scores[BoardPattern.DOUBLE_OPEN_THREE]  # 双活三
+                            if value > 2:
+                                print(
+                                    "warning: more than double open three, but not implemented"
+                                )
+                        elif key == BoardPattern.DOUBLE_BLOCKED_FOUR and value >= 2:
+                            score += scores[BoardPattern.DOUBLE_BLOCKED_FOUR]  # 双冲四
+                            if value > 2:
+                                print(
+                                    "warning: more than double blocked four, but not implemented"
+                                )
+                        elif key == BoardPattern.DOUBLE_OPEN_FOUR and value >= 2:
+                            score += scores[BoardPattern.DOUBLE_OPEN_FOUR]  # 双活四
+                            if value > 2:
+                                print(
+                                    "warning: more than double open four, but not implemented"
+                                )
+            else:  # 多种单个模式
+                if BoardPattern.OPEN_THREE in pattern and (
+                    BoardPattern.BLOCKED_FOUR in pattern
+                    or BoardPattern.OPEN_FOUR in pattern
+                ):
+                    score += scores[BoardPattern.DOUBLE_OPEN_THREE]
+                # TODO: 活三+眠三、冲四+活四
+                # elif ...
+            return score
+
+        x_direc = [-1, 0, -1, -1]  # 上 左 左上 右上
+        y_direc = [0, -1, -1, 1]  # 上 左 左上 右上
+        for x, y in candidates:
+            score = 0
+            own_pattern = defaultdict(int)
+            opp_pattern = defaultdict(int)
+            for dx, dy in zip(x_direc, y_direc):
+                pattern1 = check_pattern(x, y, dx, dy, game.current_player)
+                for key, value in pattern1.items():
+                    own_pattern[key] += value
+
+                pattern2 = check_pattern(x, y, dx, dy, 3 - game.current_player)
+                for key, value in pattern2.items():
+                    opp_pattern[key] += value
+
+            own_score = calc_scores(own_pattern)
+            opp_score = calc_scores(opp_pattern)
+            score = own_score + opp_score
+            moves.append((x, y, score))
+        moves.sort(key=lambda x: x[2], reverse=True)
+        moves = [(x, y) for x, y, _ in moves]  # 只保留坐标，不保留分数
+        print(f"generate_sorted_moves, moves number {len(moves)}")
         return moves
