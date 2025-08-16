@@ -40,8 +40,12 @@ pygame.display.set_caption("五子棋")
 
 try:
     font = pygame.font.Font("fonts/STKAITI.TTF", 40)
+    small_font = pygame.font.Font("fonts/STKAITI.TTF", 24)
+    middle_font = pygame.font.Font("fonts/STKAITI.TTF", 32)
 except FileNotFoundError:
     font = pygame.font.Font(None, 40)
+    small_font = pygame.font.Font(None, 24)
+    middle_font = pygame.font.Font(None, 32)
 
 running = True
 
@@ -154,9 +158,22 @@ def draw_board(screen, board, last_move, mouse_pos, current_player, buttons=None
             center_pos = (MARGIN + c * CELL_SIZE, MARGIN + r * CELL_SIZE)
 
             if (r, c) == last_move:
-                pygame.draw.circle(screen, HIGHLIGHT_COLOR[:3], center_pos, 5)
-
-            pygame.draw.circle(screen, color, center_pos, CELL_SIZE // 2 - 2)
+                # 高亮显示最后一步：红色外切矩形边框
+                pygame.draw.circle(screen, color, center_pos, CELL_SIZE // 2 - 2)
+                # 绘制外切矩形边框
+                rect_size = CELL_SIZE - 4
+                rect_pos = (
+                    center_pos[0] - rect_size // 2,
+                    center_pos[1] - rect_size // 2,
+                )
+                pygame.draw.rect(
+                    screen,
+                    (255, 0, 0),
+                    (rect_pos[0], rect_pos[1], rect_size, rect_size),
+                    2,
+                )
+            else:
+                pygame.draw.circle(screen, color, center_pos, CELL_SIZE // 2 - 2)
 
     # 绘制按钮
     if buttons:
@@ -164,17 +181,79 @@ def draw_board(screen, board, last_move, mouse_pos, current_player, buttons=None
             button.draw(screen)
 
 
-def draw_text(text, position):
-    text_surface = font.render(text, True, BLACK)
+def draw_text(text, position, color=BLACK, font_type: str = "small"):
+    if font_type == "small":
+        text_surface = small_font.render(text, True, color)
+    elif font_type == "middle":
+        text_surface = middle_font.render(text, True, color)
+    else:
+        text_surface = font.render(text, True, color)
     screen.blit(text_surface, position)
 
 
 def show_game_menu():
     screen.fill(BOARD_COLOR)
     draw_text("五子棋", (WINDOW_WIDTH // 2 - 50, WINDOW_HEIGHT // 4))
-    draw_text("1. 双人对战", (WINDOW_WIDTH // 2 - 100, WINDOW_HEIGHT // 2 - 50))
-    draw_text("2. AI对战", (WINDOW_WIDTH // 2 - 100, WINDOW_HEIGHT // 2 + 50))
+    draw_text("1. 双人对战", (WINDOW_WIDTH // 2 - 100, WINDOW_HEIGHT // 2 - 80))
+    draw_text("2. AI对战", (WINDOW_WIDTH // 2 - 100, WINDOW_HEIGHT // 2 - 20))
+    draw_text("3. 加载残局", (WINDOW_WIDTH // 2 - 100, WINDOW_HEIGHT // 2 + 40))
     pygame.display.flip()
+
+
+def show_load_snapshot_menu():
+    """显示加载残局菜单"""
+    screen.fill(BOARD_COLOR)
+    draw_text("选择残局文件", (WINDOW_WIDTH // 2 - 100, WINDOW_HEIGHT // 4))
+
+    # 获取board_snapshots目录下的所有json文件
+    import os
+    import glob
+
+    snapshot_files = []
+    if os.path.exists("board_snapshots"):
+        snapshot_files = glob.glob("board_snapshots/*.json")
+
+    if not snapshot_files:
+        draw_text("没有找到残局文件", (WINDOW_WIDTH // 2 - 100, WINDOW_HEIGHT // 2))
+        draw_text("按ESC返回主菜单", (WINDOW_WIDTH // 2 - 100, WINDOW_HEIGHT // 2 + 50))
+    else:
+        # 显示前10个文件
+        for i, file_path in enumerate(snapshot_files[:10]):
+            filename = os.path.basename(file_path)
+            draw_text(
+                f"{i+1}. {filename}",
+                (WINDOW_WIDTH // 2 - 150, WINDOW_HEIGHT // 2 - 100 + i * 30),
+            )
+
+        if len(snapshot_files) > 10:
+            draw_text("...", (WINDOW_WIDTH // 2 - 150, WINDOW_HEIGHT // 2 + 200))
+
+        draw_text("按ESC返回主菜单", (WINDOW_WIDTH // 2 - 100, WINDOW_HEIGHT - 50))
+
+    pygame.display.flip()
+    return snapshot_files
+
+
+def load_snapshot(filename):
+    """加载残局文件"""
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        game = Gomoku()
+        game.board = np.array(data["board"])
+        game.current_player = data["current_player"]
+        game.history = [tuple(move) for move in data["history"]]
+        game.game_over = data["game_over"]
+        game.winner = data["winner"]
+
+        if game.history:
+            game.last_move = game.history[-1][:2]
+
+        return game, data.get("game_mode", 2)  # 默认AI模式
+    except Exception as e:
+        print(f"加载残局失败: {e}")
+        return None, None
 
 
 # ==================== 6. 主循环与事件处理 ====================
@@ -182,11 +261,14 @@ def main():
     global running
     game = Gomoku()
     ai = MinmaxSearch()
-    game_mode = 0
+    game_mode = 0  # 0: 主菜单, 1: 双人对战, 2: AI对战, 3: 加载残局菜单
     mouse_pos = None
 
     ai_move_result = None
     ai_thread = None
+    snapshot_files = []  # 存储残局文件列表
+    ai_think_start_time = None  # AI开始思考的时间
+    ai_think_time = None  # AI思考用时
 
     # 创建按钮
     button_width = 120
@@ -205,15 +287,18 @@ def main():
     buttons = [undo_button, save_button]
 
     def ai_worker(game_copy):
-        nonlocal ai_move_result
+        nonlocal ai_move_result, ai_think_time
+        start_time = datetime.datetime.now()
         ai_move_result = ai.minmax(depth=4, game=game_copy)
+        end_time = datetime.datetime.now()
+        ai_think_time = (end_time - start_time).total_seconds()
 
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
-            if game_mode == 0:
+            if game_mode == 0:  # 主菜单
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_1:
                         game_mode = 1
@@ -221,6 +306,61 @@ def main():
                     elif event.key == pygame.K_2:
                         game_mode = 2
                         game.reset_game()
+                    elif event.key == pygame.K_3:
+                        game_mode = 3  # 进入残局加载菜单
+                        snapshot_files = show_load_snapshot_menu()
+
+            elif game_mode == 3:  # 残局加载菜单
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        game_mode = 0  # 返回主菜单
+                    elif event.key in [
+                        pygame.K_1,
+                        pygame.K_2,
+                        pygame.K_3,
+                        pygame.K_4,
+                        pygame.K_5,
+                        pygame.K_6,
+                        pygame.K_7,
+                        pygame.K_8,
+                        pygame.K_9,
+                        pygame.K_0,
+                    ]:
+                        # 选择残局文件
+                        key_to_index = {
+                            pygame.K_1: 0,
+                            pygame.K_2: 1,
+                            pygame.K_3: 2,
+                            pygame.K_4: 3,
+                            pygame.K_5: 4,
+                            pygame.K_6: 5,
+                            pygame.K_7: 6,
+                            pygame.K_8: 7,
+                            pygame.K_9: 8,
+                            pygame.K_0: 9,
+                        }
+                        file_index = key_to_index[event.key]
+
+                        if file_index < len(snapshot_files):
+                            selected_file = snapshot_files[file_index]
+                            loaded_game, loaded_mode = load_snapshot(selected_file)
+
+                            if loaded_game is not None:
+                                game = loaded_game
+                                game_mode = loaded_mode
+                                print(f"成功加载残局: {selected_file}")
+                                print(
+                                    f"游戏模式: {'双人对战' if game_mode == 1 else 'AI对战'}"
+                                )
+                                print(
+                                    f"当前玩家: {'黑棋' if game.current_player == 1 else '白棋'}"
+                                )
+                                print(f"历史步数: {len(game.history)}")
+                            else:
+                                print("加载残局失败")
+                                game_mode = 0
+                        else:
+                            print("无效的选择")
             else:
                 if event.type == pygame.MOUSEMOTION:
                     mouse_pos = pygame.mouse.get_pos()
@@ -258,22 +398,44 @@ def main():
                     elif save_button.handle_event(event):
                         button_clicked = True
                         try:
+                            # 创建游戏副本用于保存
+                            game_copy = copy.deepcopy(game)
+
+                            # 如果是AI模式且当前轮到AI，需要悔棋AI的最后一步
+                            if (
+                                game_mode == 2
+                                and game_copy.current_player == 1
+                                and game_copy.history
+                            ):
+                                # 悔棋AI的最后一步
+                                game_copy.undo_move()
+                                print("已悔棋AI的最后一步，准备保存棋局")
+
                             snapshot = {
-                                "current_player": game.current_player,
-                                "board": game.board.tolist(),
-                                "history": game.history,
+                                "current_player": game_copy.current_player,
+                                "board": game_copy.board.tolist(),
+                                "history": game_copy.history,
                                 "game_mode": game_mode,
-                                "game_over": game.game_over,
-                                "winner": game.winner,
+                                "game_over": game_copy.game_over,
+                                "winner": game_copy.winner,
                                 "save_time": datetime.datetime.now().isoformat(),
-                                "total_moves": len(game.history),
+                                "total_moves": len(game_copy.history),
+                                "ai_undone": game_mode == 2
+                                and game_copy.current_player == 2,  # 标记是否悔棋了AI
                             }
 
-                            filename = f"gomoku_snapshot_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                            # 确保board_snapshots目录存在
+                            import os
+
+                            os.makedirs("board_snapshots", exist_ok=True)
+
+                            filename = f"board_snapshots/gomoku_snapshot_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
                             with open(filename, "w", encoding="utf-8") as f:
                                 json.dump(snapshot, f, ensure_ascii=False, indent=2)
                             print(f"已保存棋局快照到 {filename}")
-                            print(f"当前步数: {len(game.history)}")
+                            print(f"当前步数: {len(game_copy.history)}")
+                            if snapshot["ai_undone"]:
+                                print("注意：已悔棋AI的最后一步，保存的棋局轮到AI下棋")
                         except Exception as e:
                             print(f"保存快照失败: {e}")
 
@@ -294,11 +456,15 @@ def main():
 
         if game_mode == 0:
             show_game_menu()
+        elif game_mode == 3:
+            show_load_snapshot_menu()
         else:
             # AI线程启动与结果处理
             if game_mode == 2 and game.current_player == 2 and not game.game_over:
                 if ai_thread is None or not ai_thread.is_alive():
                     if ai_move_result is None:
+                        ai_think_start_time = datetime.datetime.now()
+                        ai_think_time = None
                         game_copy = copy.deepcopy(game)
                         ai_thread = threading.Thread(
                             target=ai_worker, args=(game_copy,), daemon=True
@@ -328,19 +494,38 @@ def main():
                     (WINDOW_WIDTH // 2 - 180, WINDOW_HEIGHT // 2 + 30),
                 )
             else:
+                # 在上方一排显示信息
                 current_player_text = (
-                    f"当前玩家: {'黑棋' if game.current_player == 1 else '白棋'}"
+                    f"当前: {'黑棋' if game.current_player == 1 else '白棋'}"
                 )
-                draw_text(current_player_text, (10, 10))
+                mode_text = f"模式: {'双人' if game_mode == 1 else 'AI'}"
+                history_text = f"步数: {len(game.history)}"
 
-                # AI思考中提示
+                draw_text(current_player_text, (10, 10))
+                draw_text(mode_text, (150, 10))
+                draw_text(history_text, (250, 10))
+
+                # AI思考中提示 - 放在按钮下方居中
                 if (
                     game_mode == 2
                     and game.current_player == 2
                     and ai_thread is not None
                     and ai_thread.is_alive()
                 ):
-                    draw_text("AI思考中...", (WINDOW_WIDTH - 200, WINDOW_HEIGHT - 50))
+                    draw_text(
+                        "AI思考中...",
+                        (WINDOW_WIDTH // 2 - 50, button_y + button_height + 20),
+                        (255, 0, 0),
+                        font_type="middle",
+                    )
+                elif ai_think_time is not None:
+                    # 显示AI思考用时
+                    think_time_text = f"AI用时: {ai_think_time:.1f}秒"
+                    draw_text(
+                        think_time_text,
+                        (WINDOW_WIDTH // 2 - 60, button_y + button_height + 20),
+                        font_type="middle",
+                    )
             pygame.display.flip()
 
     pygame.quit()

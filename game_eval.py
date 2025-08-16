@@ -105,6 +105,104 @@ scores = {
 }
 
 
+# 基础分数映射
+SCORE_MAP = {
+    "FIVE": 8e9,
+    "OPEN_FOUR": 20000,
+    "BLOCKED_FOUR": 5000,
+    "OPEN_THREE": 3000,
+    "BLOCKED_THREE": 100,
+    "OPEN_TWO": 300,
+    "DOUBLE_OPEN_THREE": 15000,
+    "DOUBLE_OPEN_FOUR": 50000,
+}
+
+# 黑棋大正则
+BLACK_UNION = re.compile(
+    "(?=(?P<FIVE>11111)|"
+    "(?P<OPEN_FOUR>011110)|"
+    "(?P<BLOCKED_FOUR>01111(2|3)|(2|3)11110|0101110|0110110|0111010)|"
+    "(?P<OPEN_THREE>01110|010110|011010)|"
+    "(?P<BLOCKED_THREE>(2|3)1110|0111(2|3)|(2|3)10110|1101(2|3))|"
+    "(?P<OPEN_TWO>0110))"
+)
+
+# 白棋大正则
+WHITE_UNION = re.compile(
+    "(?=(?P<FIVE>22222)|"
+    "(?P<OPEN_FOUR>022220)|"
+    "(?P<BLOCKED_FOUR>02222(1|3)|(1|3)22220|0202220|0220220|0222020)|"
+    "(?P<OPEN_THREE>02220|020220|022020)|"
+    "(?P<BLOCKED_THREE>(1|3)2220|0222(1|3)|(1|3)20220|2202(1|3))|"
+    "(?P<OPEN_TWO>0220))"
+)
+
+
+class GomokuEvalOptimized:
+    @staticmethod
+    def get_board_lines(board: np.ndarray) -> List[str]:
+        rows = [row for row in board]
+        cols = [board[:, i] for i in range(board.shape[1])]
+        diags = [board.diagonal(i) for i in range(-board.shape[0] + 1, board.shape[1])]
+        anti_diags = [
+            np.fliplr(board).diagonal(i)
+            for i in range(-board.shape[0] + 1, board.shape[1])
+        ]
+        lines = rows + cols + diags + anti_diags
+        lines = ["".join(x.astype(str)) for x in lines]
+        return lines
+
+    @staticmethod
+    def evaluate(game: Gomoku):
+        """优化后的评估函数：支持正则快速扫描，并识别双活三/双活四"""
+        lines = GomokuEvalOptimized.get_board_lines(game.board)
+        lines = ["3" + line + "3" for line in lines]  # 加哨兵简化边界
+
+        own_union = BLACK_UNION if game.current_player == 1 else WHITE_UNION
+        opp_union = WHITE_UNION if game.current_player == 1 else BLACK_UNION
+
+        score = 0
+        own_open_three = 0
+        own_open_four = 0
+        opp_open_three = 0
+        opp_open_four = 0
+
+        for line in lines:
+            # 自己的棋型
+            for m in own_union.finditer(line):
+                kind = m.lastgroup
+                if kind == "FIVE":
+                    return SCORE_MAP["FIVE"]
+                if kind == "OPEN_THREE":
+                    own_open_three += 1
+                if kind == "OPEN_FOUR":
+                    own_open_four += 1
+                score += SCORE_MAP.get(kind, 0)
+
+            # 对手的棋型
+            for m in opp_union.finditer(line):
+                kind = m.lastgroup
+                if kind == "FIVE":
+                    return -SCORE_MAP["FIVE"]
+                if kind == "OPEN_THREE":
+                    opp_open_three += 1
+                if kind == "OPEN_FOUR":
+                    opp_open_four += 1
+                score -= SCORE_MAP.get(kind, 0) * 2.1
+
+        # 额外处理双活三、双活四
+        if own_open_three >= 2:
+            score += SCORE_MAP["DOUBLE_OPEN_THREE"]
+        if own_open_four >= 2:
+            score += SCORE_MAP["DOUBLE_OPEN_FOUR"]
+        if opp_open_three >= 2:
+            score -= SCORE_MAP["DOUBLE_OPEN_THREE"] * 2.1
+        if opp_open_four >= 2:
+            score -= SCORE_MAP["DOUBLE_OPEN_FOUR"] * 2.1
+
+        return score
+
+
 class GomokuEval:
     @staticmethod
     def get_board_lines(board: np.ndarray) -> List[str]:
@@ -154,7 +252,7 @@ class GomokuEval:
         """Generate moves and its scores for the current game state."""
         # 先不考虑着法的好坏，生成已有棋子的领域3x3内的空白位置作为候选着法
         # TODO：按着法能形成的棋形进行打分，得分高的候选落子应该具有较高的优先级
-        moves = []
+        moves = set()  # 使用set来避免重复
         BOARD_SIZE = 15
         x_direc = [-1, 1, 0, 0, -1, -1, 1, 1]  # 上 下 左 右 左上 右上 左下 右下
         y_direc = [0, 0, -1, 1, -1, 1, -1, 1]  # 上 下 左 右 左上 右上 左下 右下
@@ -165,19 +263,14 @@ class GomokuEval:
             for j in range(15):
                 if game.board[i][j] != 0:
                     Q.put((i, j))
-        visited = np.zeros((15, 15))
         while not Q.empty():
             t = Q.get(block=False)
-            if visited[t[0]][t[1]] == 1:
-                continue
-            visited[t[0]][t[1]] = 1
             for x, y in zip(x_direc, y_direc):
                 nx, ny = t[0] + x, t[1] + y
                 if 0 <= nx < BOARD_SIZE and 0 <= ny < BOARD_SIZE:
-                    visited[nx][ny] = 1
                     if game.board[nx][ny] == 0:
-                        moves.append((nx, ny))
-        return moves
+                        moves.add((nx, ny))  # 使用add而不是append
+        return list(moves)  # 转换为list返回
 
     @staticmethod
     def generate_sorted_moves(game: Gomoku):
