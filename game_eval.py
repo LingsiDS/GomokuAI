@@ -40,39 +40,54 @@ def pattern2str(pattern: IntEnum):
 # TODO: pattern需要细化，以及得分需要细化，同时应该考虑防守
 black_patterns = {
     # BoardPattern.DUMMY: [""],
-    BoardPattern.FIVE: ["11111"],
-    BoardPattern.OPEN_FOUR: ["011110"],  # 活四：己方下一手必成五连
+    BoardPattern.FIVE: [re.compile("11111")],
+    BoardPattern.OPEN_FOUR: [re.compile("011110")],  # 活四：己方下一手必成五连
     BoardPattern.BLOCKED_FOUR: [
-        "01111(2|$)",
-        "(2|^)11110",
-        "0101110",
-        "0110110",
-        "0111010",
+        re.compile("01111(2|$)"),
+        re.compile("(2|^)11110"),
+        re.compile("0101110"),
+        re.compile("0110110"),
+        re.compile("0111010"),
     ],  # 冲四的定义是：己方下一步可形成五连，但对手也只需一步可以立即阻止五连形成
-    BoardPattern.OPEN_THREE: ["01110", "010110", "011010"],
-    BoardPattern.BLOCKED_THREE: ["(2|^)1110", "0111(2|$)", "(2|^)10110", "1101(2|$)"],
-    BoardPattern.OPEN_TWO: ["0110"],
+    BoardPattern.OPEN_THREE: [
+        re.compile("01110"),
+        re.compile("010110"),
+        re.compile("011010"),
+    ],
+    BoardPattern.BLOCKED_THREE: [
+        re.compile("(2|^)1110"),
+        re.compile("0111(2|$)"),
+        re.compile("(2|^)10110"),
+        re.compile("1101(2|$)"),
+    ],
+    BoardPattern.OPEN_TWO: [re.compile("0110")],
 }
 
 white_patterns = {
     # BoardPattern.DUMMY: [""],
-    BoardPattern.FIVE: ["22222"],  # 白棋五连
-    BoardPattern.OPEN_FOUR: ["022220"],  # 白棋活四：两端有空位，下一手必成五
+    BoardPattern.FIVE: [re.compile("22222")],  # 白棋五连
+    BoardPattern.OPEN_FOUR: [
+        re.compile("022220")
+    ],  # 白棋活四：两端有空位，下一手必成五
     BoardPattern.BLOCKED_FOUR: [
-        "02222(1|$)",  # 左侧空位，右侧被黑棋或边界阻挡
-        "(1|^)22220",  # 左侧被黑棋或边界阻挡，右侧空位
-        "0202220",  # 间隔型冲四（20222）
-        "0220220",  # 间隔型冲四（22022）
-        "0222020",  # 间隔型冲四（22202）
+        re.compile("02222(1|$)"),  # 左侧空位，右侧被黑棋或边界阻挡
+        re.compile("(1|^)22220"),  # 左侧被黑棋或边界阻挡，右侧空位
+        re.compile("0202220"),  # 间隔型冲四（20222）
+        re.compile("0220220"),  # 间隔型冲四（22022）
+        re.compile("0222020"),  # 间隔型冲四（22202）
     ],  # 白棋冲四：可成五但被黑棋一步阻挡
-    BoardPattern.OPEN_THREE: ["02220", "020220", "022020"],  # 白棋活三
+    BoardPattern.OPEN_THREE: [
+        re.compile("02220"),
+        re.compile("020220"),
+        re.compile("022020"),
+    ],  # 白棋活三
     BoardPattern.BLOCKED_THREE: [
-        "(1|^)2220",
-        "0222(1|$)",
-        "(1|^)20220",
-        "2202(1|$)",
+        re.compile("(1|^)2220"),
+        re.compile("0222(1|$)"),
+        re.compile("(1|^)20220"),
+        re.compile("2202(1|$)"),
     ],  # 白棋冲三
-    BoardPattern.OPEN_TWO: ["0220"],  # 白棋活二
+    BoardPattern.OPEN_TWO: [re.compile("0220")],  # 白棋活二
 }
 
 
@@ -106,7 +121,7 @@ class GomokuEval:
         ]
 
         lines = rows + cols + diags + anti_diags
-        lines = ["".join(x.astype(int).astype(str)) for x in lines]
+        lines = ["".join(x.astype(str)) for x in lines]
         return lines
 
     @staticmethod
@@ -124,11 +139,11 @@ class GomokuEval:
         for state in state_strs:
             for pattern, regexs in own_patterns.items():
                 for regex in regexs:
-                    if re.search(regex, state):  # TODO: 多次加分
+                    if regex.search(state):  # TODO: 多次加分
                         game_score += scores[pattern]
             for pattern, regexs in opp_patterns.items():
                 for regex in regexs:
-                    if re.search(regex, state):
+                    if regex.search(state):
                         game_score -= (
                             scores[pattern] * 2.1
                         )  # 对手的棋形权重增加，让AI注重防守
@@ -274,5 +289,5 @@ class GomokuEval:
             moves.append((x, y, score))
         moves.sort(key=lambda x: x[2], reverse=True)
         moves = [(x, y) for x, y, _ in moves]  # 只保留坐标，不保留分数
-        print(f"generate_sorted_moves, moves number {len(moves)}")
+        # print(f"generate_sorted_moves, moves number {len(moves)}")
         return moves
