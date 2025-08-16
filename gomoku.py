@@ -11,25 +11,30 @@ class Gomoku:
         self.game_over = False
         self.winner = None
         self.last_move = None
+        self.history = []  # 存储落子历史
 
     def reset_game(self):
-        self.board = np.zeros((BOARD_SIZE, BOARD_SIZE))
+        self.board = np.zeros((BOARD_SIZE, BOARD_SIZE), dtype=np.int8)
         self.current_player = 1
         self.game_over = False
         self.winner = None
         self.last_move = None
+        self.history.clear()
 
     def is_valid_move(self, row, col):
-        return (
+        if (
             0 <= row < BOARD_SIZE
             and 0 <= col < BOARD_SIZE
             and self.board[row][col] == 0
-        )
+        ):
+            return True
+        return False
 
     def make_move(self, row, col):
         if self.is_valid_move(row, col):
             self.board[row][col] = self.current_player
             self.last_move = (row, col)
+            self.history.append((row, col, self.current_player))  # 记录历史
             if self.check_win(row, col):
                 self.game_over = True
                 self.winner = self.current_player
@@ -38,12 +43,20 @@ class Gomoku:
             return True
         return False
 
-    def undo_move(self, row: int, col: int):
-        assert (
-            0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE
-        ), f"({row}, {col}) is invalid position!"
+    def undo_move(self):
+        if not self.history:
+            print("没有可撤销的步骤")
+            return False
+        row, col, player = self.history.pop()
         self.board[row][col] = 0
-        self.current_player = 3 - self.current_player
+        self.current_player = player
+        self.game_over = False
+        self.winner = None
+        if self.history:
+            self.last_move = self.history[-1][:2]
+        else:
+            self.last_move = None
+        return True
 
     def check_win(self, row, col):
         player = self.board[row][col]

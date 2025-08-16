@@ -6,14 +6,16 @@ from gomoku import Gomoku
 from alpha_beta_search import MinmaxSearch
 import threading
 import copy
+import json, datetime
 
 # ==================== 1. 游戏设置与常量 ====================
 # 窗口设置
 WINDOW_WIDTH = 800
-WINDOW_HEIGHT = 800
+WINDOW_HEIGHT = 900  # 增加窗口高度，为按钮留出空间
 BOARD_SIZE = 15
 CELL_SIZE = 50
 MARGIN = (WINDOW_WIDTH - (BOARD_SIZE - 1) * CELL_SIZE) // 2
+BOARD_BOTTOM = MARGIN + (BOARD_SIZE - 1) * CELL_SIZE  # 棋盘底部位置
 
 # 颜色定义
 WHITE = (255, 255, 255)
@@ -23,6 +25,9 @@ BOARD_COLOR = (194, 178, 128)
 HIGHLIGHT_COLOR = (255, 0, 0, 100)
 TIP_COLOR_BLACK = (0, 0, 0, 100)
 TIP_COLOR_WHITE = (255, 255, 255, 100)
+BUTTON_COLOR = (100, 150, 200)
+BUTTON_HOVER_COLOR = (120, 170, 220)
+BUTTON_TEXT_COLOR = WHITE
 
 # 棋子颜色
 BLACK_STONE = BLACK
@@ -34,14 +39,47 @@ screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 pygame.display.set_caption("五子棋")
 
 try:
-    font = pygame.font.Font("fonts\STKAITI.TTF", 40)
+    font = pygame.font.Font("fonts/STKAITI.TTF", 40)
 except FileNotFoundError:
     font = pygame.font.Font(None, 40)
 
 running = True
 
 
-# ==================== 3. AI逻辑 ====================
+# ==================== 3. 按钮类 ====================
+class Button:
+    def __init__(self, x, y, width, height, text, font_size=30):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.text = text
+        # 使用系统默认字体，避免乱码
+        try:
+            self.font = pygame.font.Font("fonts/STKAITI.TTF", font_size)
+        except FileNotFoundError:
+            self.font = pygame.font.Font(None, font_size)
+        self.color = BUTTON_COLOR
+        self.hover_color = BUTTON_HOVER_COLOR
+        self.text_color = BUTTON_TEXT_COLOR
+        self.is_hovered = False
+
+    def draw(self, screen):
+        color = self.hover_color if self.is_hovered else self.color
+        pygame.draw.rect(screen, color, self.rect)
+        pygame.draw.rect(screen, BLACK, self.rect, 2)
+
+        text_surface = self.font.render(self.text, True, self.text_color)
+        text_rect = text_surface.get_rect(center=self.rect.center)
+        screen.blit(text_surface, text_rect)
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEMOTION:
+            self.is_hovered = self.rect.collidepoint(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(event.pos):
+                return True
+        return False
+
+
+# ==================== 4. AI逻辑 ====================
 class AI:
     def __init__(self):
         pass
@@ -57,8 +95,8 @@ class AI:
         return None
 
 
-# ==================== 4. Pygame界面绘制 ====================
-def draw_board(screen, board, last_move, mouse_pos, current_player):
+# ==================== 5. Pygame界面绘制 ====================
+def draw_board(screen, board, last_move, mouse_pos, current_player, buttons=None):
     screen.fill(BOARD_COLOR)
     for i in range(BOARD_SIZE):
         start_pos_x = MARGIN + i * CELL_SIZE
@@ -67,14 +105,14 @@ def draw_board(screen, board, last_move, mouse_pos, current_player):
             screen,
             BLACK,
             (MARGIN, start_pos_y),
-            (WINDOW_WIDTH - MARGIN, start_pos_y),
+            (BOARD_BOTTOM, start_pos_y),
             2,
         )
         pygame.draw.line(
             screen,
             BLACK,
             (start_pos_x, MARGIN),
-            (start_pos_x, WINDOW_HEIGHT - MARGIN),
+            (start_pos_x, BOARD_BOTTOM),
             2,
         )
 
@@ -120,6 +158,11 @@ def draw_board(screen, board, last_move, mouse_pos, current_player):
 
             pygame.draw.circle(screen, color, center_pos, CELL_SIZE // 2 - 2)
 
+    # 绘制按钮
+    if buttons:
+        for button in buttons:
+            button.draw(screen)
+
 
 def draw_text(text, position):
     text_surface = font.render(text, True, BLACK)
@@ -134,7 +177,7 @@ def show_game_menu():
     pygame.display.flip()
 
 
-# ==================== 5. 主循环与事件处理 ====================
+# ==================== 6. 主循环与事件处理 ====================
 def main():
     global running
     game = Gomoku()
@@ -144,6 +187,22 @@ def main():
 
     ai_move_result = None
     ai_thread = None
+
+    # 创建按钮
+    button_width = 120
+    button_height = 40
+    button_y = BOARD_BOTTOM + 30  # 按钮位于棋盘下方30像素处
+    undo_button = Button(
+        WINDOW_WIDTH // 2 - button_width - 20,
+        button_y,
+        button_width,
+        button_height,
+        "悔棋",
+    )
+    save_button = Button(
+        WINDOW_WIDTH // 2 + 20, button_y, button_width, button_height, "保存棋局"
+    )
+    buttons = [undo_button, save_button]
 
     def ai_worker(game_copy):
         nonlocal ai_move_result
@@ -165,19 +224,70 @@ def main():
             else:
                 if event.type == pygame.MOUSEMOTION:
                     mouse_pos = pygame.mouse.get_pos()
-                elif event.type == pygame.MOUSEBUTTONDOWN and not game.game_over:
-                    if game_mode == 1 or (game_mode == 2 and game.current_player == 1):
+                    # 处理按钮悬停
+                    for button in buttons:
+                        button.handle_event(event)
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    # 先处理按钮点击
+                    button_clicked = False
+                    if undo_button.handle_event(event):
+                        button_clicked = True
+                        if game_mode == 1:  # 双人对战模式
+                            if game.undo_move():
+                                print("悔棋完成")
+                            else:
+                                print("没有可撤销的步骤")
+                        elif game_mode == 2:  # AI模式
+                            # 如果AI正在思考，先停止AI
+                            if ai_thread and ai_thread.is_alive():
+                                ai_move_result = None
+                                print("AI思考已停止")
+
+                            # 撤销AI落子和玩家落子
+                            undo_count = 0
+                            if game.undo_move():  # 撤销AI落子
+                                undo_count += 1
+                            if game.undo_move():  # 撤销玩家落子
+                                undo_count += 1
+
+                            if undo_count > 0:
+                                print(f"悔棋完成，撤销了{undo_count}步")
+                            else:
+                                print("没有可撤销的步骤")
+
+                    elif save_button.handle_event(event):
+                        button_clicked = True
+                        try:
+                            snapshot = {
+                                "current_player": game.current_player,
+                                "board": game.board.tolist(),
+                                "history": game.history,
+                                "game_mode": game_mode,
+                                "game_over": game.game_over,
+                                "winner": game.winner,
+                                "save_time": datetime.datetime.now().isoformat(),
+                                "total_moves": len(game.history),
+                            }
+
+                            filename = f"gomoku_snapshot_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                            with open(filename, "w", encoding="utf-8") as f:
+                                json.dump(snapshot, f, ensure_ascii=False, indent=2)
+                            print(f"已保存棋局快照到 {filename}")
+                            print(f"当前步数: {len(game.history)}")
+                        except Exception as e:
+                            print(f"保存快照失败: {e}")
+
+                    # 如果没有点击按钮，检查是否点击了棋盘
+                    if not button_clicked and not game.game_over:
                         pos = pygame.mouse.get_pos()
                         col = round((pos[0] - MARGIN) / CELL_SIZE)
                         row = round((pos[1] - MARGIN) / CELL_SIZE)
-                        game.make_move(row, col)
-                        draw_board(
-                            screen,
-                            game.board,
-                            game.last_move,
-                            mouse_pos,
-                            game.current_player,
-                        )
+                        if 0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE:
+                            if game_mode == 1 or (
+                                game_mode == 2 and game.current_player == 1
+                            ):
+                                game.make_move(row, col)
+
                 elif event.type == pygame.KEYDOWN and game.game_over:
                     game.reset_game()
                     game_mode = 0
@@ -200,7 +310,12 @@ def main():
                     ai_move_result = None
 
             draw_board(
-                screen, game.board, game.last_move, mouse_pos, game.current_player
+                screen,
+                game.board,
+                game.last_move,
+                mouse_pos,
+                game.current_player,
+                buttons,
             )
 
             if game.game_over:

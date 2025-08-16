@@ -17,7 +17,7 @@ class MinmaxSearch:
         for next_move in next_moves:
             self.game.make_move(next_move[0], next_move[1])
             val, mv = self.min_value(depth - 1, alpha, beta)
-            self.game.undo_move(next_move[0], next_move[1])
+            self.game.undo_move()
             if val > value:
                 value, move = val, next_move
             alpha = max(alpha, val)
@@ -35,7 +35,7 @@ class MinmaxSearch:
         for next_move in next_moves:
             self.game.make_move(next_move[0], next_move[1])
             val, mv = self.max_value(depth - 1, alpha, beta)
-            self.game.undo_move(next_move[0], next_move[1])
+            self.game.undo_move()
             if val < value:
                 value, move = val, next_move
             beta = min(beta, val)
@@ -47,7 +47,7 @@ class MinmaxSearch:
         """Minimax algorithm implementation."""
         self.game = game
         val, move = self.max_value(depth, float("-inf"), float("inf"))
-        print("minmax search val: ", val)
+        # print("minmax search val: ", val)
         return move
 
 
