@@ -11,18 +11,17 @@ class MinmaxSearch:
         """Max value function for minimax algorithm."""
         if self.game.game_over or depth == 0:
             return GomokuEvalOptimized.evaluate(self.game), None
-        if self.game.check_last_move_win():  # last move is player, player win
-            assert self.game.current_player == 1, "last move is player, player win"
-            return float("-inf"), None
 
         value, move = float("-inf"), None
-        next_moves = GomokuEval.generate_sorted_moves(self.game)
+        next_moves = GomokuEval.generate_sorted_moves2(self.game)
         for next_move in next_moves:
-            game_over = self.game.make_move(next_move[0], next_move[1])
+            self.game.make_move(next_move[0], next_move[1])
             val, mv = self.min_value(depth - 1, alpha, beta)
-            self.game.undo_move()
-            if game_over:  # 直接结束，不需要搜索其他步骤，提速明显
+            if self.game.game_over:  # 直接结束，不需要搜索其他步骤，提速明显
+                assert self.game.winner == 2, "last move is AI, AI win"
+                self.game.undo_move()
                 return val, next_move
+            self.game.undo_move()
             if val > value:
                 value, move = val, next_move
             alpha = max(alpha, val)
@@ -34,18 +33,17 @@ class MinmaxSearch:
         """Min value function for minimax algorithm."""
         if self.game.game_over or depth == 0:
             return GomokuEvalOptimized.evaluate(self.game), None
-        if self.game.check_last_move_win():  # last move is AI, AI win
-            assert self.game.current_player == 2, "last move is AI, AI win"
-            return float("inf"), None
 
-        next_moves = GomokuEval.generate_sorted_moves(self.game)
+        next_moves = GomokuEval.generate_sorted_moves2(self.game)
         value, move = float("inf"), None
         for next_move in next_moves:
-            game_over = self.game.make_move(next_move[0], next_move[1])
+            self.game.make_move(next_move[0], next_move[1])
             val, mv = self.max_value(depth - 1, alpha, beta)
-            self.game.undo_move()
-            if game_over:  # 直接结束，不需要搜索其他步骤，提速明显
+            if self.game.game_over:  # 直接结束，不需要搜索其他步骤，提速明显
+                assert self.game.winner == 1, "last move is player, player win"
+                self.game.undo_move()
                 return val, next_move
+            self.game.undo_move()
             if val < value:
                 value, move = val, next_move
             beta = min(beta, val)
