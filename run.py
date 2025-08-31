@@ -9,29 +9,8 @@ import copy
 import json, datetime
 
 # ==================== 1. 游戏设置与常量 ====================
-# 窗口设置
-WINDOW_WIDTH = 800
-WINDOW_HEIGHT = 900  # 增加窗口高度，为按钮留出空间
-BOARD_SIZE = 15
-CELL_SIZE = 50
-MARGIN = (WINDOW_WIDTH - (BOARD_SIZE - 1) * CELL_SIZE) // 2
-BOARD_BOTTOM = MARGIN + (BOARD_SIZE - 1) * CELL_SIZE  # 棋盘底部位置
-
-# 颜色定义
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GRAY = (200, 200, 200)
-BOARD_COLOR = (194, 178, 128)
-HIGHLIGHT_COLOR = (255, 0, 0, 100)
-TIP_COLOR_BLACK = (0, 0, 0, 100)
-TIP_COLOR_WHITE = (255, 255, 255, 100)
-BUTTON_COLOR = (100, 150, 200)
-BUTTON_HOVER_COLOR = (120, 170, 220)
-BUTTON_TEXT_COLOR = WHITE
-
-# 棋子颜色
-BLACK_STONE = BLACK
-WHITE_STONE = WHITE
+# 从常量配置文件导入所有常量
+from constants import *
 
 # Pygame初始化
 pygame.init()
@@ -260,7 +239,7 @@ def load_snapshot(filename):
 def main():
     global running
     game = Gomoku()
-    ai = MinmaxSearch()
+    ai = MinmaxSearch(time_limit=6)
     game_mode = 0  # 0: 主菜单, 1: 双人对战, 2: AI对战, 3: 加载残局菜单
     mouse_pos = None
 
@@ -289,7 +268,8 @@ def main():
     def ai_worker(game_copy):
         nonlocal ai_move_result, ai_think_time
         start_time = datetime.datetime.now()
-        ai_move_result = ai.minmax(depth=4, game=game_copy)
+        # ai_move_result = ai.minmax(depth=6, game=game_copy)
+        ai_move_result = ai.iterative_deepening(max_depth=6, game=game_copy)
         end_time = datetime.datetime.now()
         ai_think_time = (end_time - start_time).total_seconds()
 

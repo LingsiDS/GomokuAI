@@ -625,7 +625,91 @@ class GomokuEval:
                     [pattern2str(p) for p in opp_pattern],
                 )
             )
+        # 先按综合分排序，随后进入“分桶+早停+限宽/级联填充”
         moves.sort(key=lambda x: x[2], reverse=True)
-        # print(f"moves: {moves}")
-        moves = [(x, y) for x, y, _, _, _ in moves]  # 只保留坐标，不保留分数
-        return moves
+
+        # Top-K 配置（可按需微调）
+        K_A2 = 4  # 挡对手成五
+        K_B = 6  # 活四/双活四（本桶上限）
+        K_C = 8  # 四三杀/双活三（累计上限）
+        K_D = 12  # 冲四/活三（累计上限）
+        K_TOTAL = 16  # 总候选上限
+        MIN_FLOOR = 8  # 级联填充的最小返回数（避免过窄导致走法单一）
+
+        def to_coords(ms, k=None):
+            coords = [(x, y) for x, y, _, _, _ in ms]
+            return coords if k is None else coords[:k]
+
+        def has(patterns, key):
+            return key in patterns
+
+        # A1: 我方立即胜（落子即五连）→ 只走这些
+        bucket_A1 = [m for m in moves if has(m[3], "FIVE")]
+        if bucket_A1:
+            return to_coords(bucket_A1)
+
+        # A2: 对手立即胜（对手在此可五连）→ 这些是主要防点
+        bucket_A2 = [m for m in moves if has(m[4], "FIVE")]
+        if bucket_A2:
+            return to_coords(bucket_A2, K_A2)
+
+        # B: 活四/双活四（进攻或防守）
+        bucket_B = [
+            m
+            for m in moves
+            if has(m[3], "OPEN_FOUR")
+            or has(m[4], "OPEN_FOUR")
+            or has(m[3], "DOUBLE_OPEN_FOUR")
+            or has(m[4], "DOUBLE_OPEN_FOUR")
+        ]
+
+        # C: 四三杀 / 双活三（进攻或防守）
+        bucket_C = [
+            m
+            for m in moves
+            if any(t in m[3] for t in ("FOUR_THREE", "DOUBLE_OPEN_THREE"))
+            or any(t in m[4] for t in ("FOUR_THREE", "DOUBLE_OPEN_THREE"))
+        ]
+
+        # D: 冲四 / 活三（进攻或防守）
+        bucket_D = [
+            m
+            for m in moves
+            if has(m[3], "BLOCKED_FOUR")
+            or has(m[3], "OPEN_THREE")
+            or has(m[4], "BLOCKED_FOUR")
+            or has(m[4], "OPEN_THREE")
+        ]
+
+        # 级联填充：
+        # - A1/A2 独占返回；B/C/D 按序逐层补齐，直到达到 K_TOTAL 或列表耗尽；
+        # - 保证至少返回 MIN_FLOOR 个候选，避免走法过于单一。
+        chosen = []
+        chosen_set = set()
+
+        def extend_from(bucket, limit):
+            nonlocal chosen
+            for x, y, *_ in bucket:
+                if (x, y) in chosen_set:
+                    continue
+                chosen.append((x, y))
+                chosen_set.add((x, y))
+                if len(chosen) >= limit:
+                    break
+
+        # 先从 B 取到 K_B 上限（不超过总上限）
+        extend_from(bucket_B, min(K_B, K_TOTAL))
+
+        # 若不足最低数量，则从 C 继续补到 max(MIN_FLOOR, K_C)
+        if len(chosen) < max(MIN_FLOOR, min(K_C, K_TOTAL)):
+            extend_from(bucket_C, min(max(MIN_FLOOR, K_C), K_TOTAL))
+
+        # 若仍不足，则从 D 继续补到 max(MIN_FLOOR, K_D)
+        if len(chosen) < max(MIN_FLOOR, min(K_D, K_TOTAL)):
+            extend_from(bucket_D, min(max(MIN_FLOOR, K_D), K_TOTAL))
+
+        # 最后用全体排序列表兜底补齐至 K_TOTAL
+        if len(chosen) < K_TOTAL:
+            extend_from(moves, K_TOTAL)
+
+        return chosen

@@ -1,6 +1,7 @@
 import numpy as np
 
-BOARD_SIZE = 15
+from constants import BOARD_SIZE
+from zobrist_table import Zobrist
 
 
 # ==================== 2. 游戏核心逻辑 ====================
@@ -12,6 +13,8 @@ class Gomoku:
         self.winner = None
         self.last_move = None
         self.history = []  # 存储落子历史
+        self.hash_key = 0
+        self.zobrist = Zobrist()
 
     def reset_game(self):
         self.board = np.zeros((BOARD_SIZE, BOARD_SIZE), dtype=np.int8)
@@ -20,6 +23,7 @@ class Gomoku:
         self.winner = None
         self.last_move = None
         self.history.clear()
+        self.hash_key = 0
 
     def is_valid_move(self, row, col):
         if (
@@ -33,6 +37,8 @@ class Gomoku:
     def make_move(self, row, col):
         if self.is_valid_move(row, col):
             self.board[row][col] = self.current_player
+            self.hash_key ^= self.zobrist.piece_key(row, col, self.current_player)
+            self.hash_key ^= self.zobrist.side_key
             self.last_move = (row, col)
             self.history.append((row, col, self.current_player))  # 记录历史
             if self.check_win(row, col):
@@ -52,6 +58,8 @@ class Gomoku:
             return False
         row, col, player = self.history.pop()
         self.board[row][col] = 0
+        self.hash_key ^= self.zobrist.piece_key(row, col, player)
+        self.hash_key ^= self.zobrist.side_key
         self.current_player = player
         self.game_over = False
         self.winner = None
