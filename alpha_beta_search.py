@@ -16,6 +16,7 @@ class MinmaxSearch:
     def __init__(self, time_limit: float):
         self.time_limit = time_limit
         self.tt = TranspositionTable()
+        self.start_time = time.time()  # 初始化start_time属性
 
     def max_value(self, depth: int, alpha: float, beta: float):
         """Max value function for minimax algorithm."""
@@ -30,7 +31,7 @@ class MinmaxSearch:
         if ttv is not None:
             return ttv
 
-        value, move = float("-inf"), None
+        value, move, val = float("-inf"), None, 0
         next_moves = GomokuEval.generate_sorted_moves2(self.game)
         # TT best move first when available
         entry = self.tt.get(self.game.hash_key)
@@ -46,11 +47,15 @@ class MinmaxSearch:
                 self.game.make_move(next_move[0], next_move[1])
                 val = self.min_value(depth - 1, alpha, beta)
             finally:
+                if self.game.game_over:  # 直接结束，不需要搜索其他步骤，提速明显
+                    assert self.game.winner == 2, "last move is AI, AI win"
+                    self.game.undo_move()
+                    self.store_tt(
+                        self.game.hash_key, depth, val, alpha, beta, next_move
+                    )
+                    return val
                 self.game.undo_move()  # 确保抛出异常后也要执行undo_move
-            if self.game.game_over:  # 直接结束，不需要搜索其他步骤，提速明显
-                assert self.game.winner == 2, "last move is AI, AI win"
-                self.store_tt(self.game.hash_key, depth, val, alpha, beta, next_move)
-                return val
+
             if val > value:
                 value, move = val, next_move
             alpha = max(alpha, val)
@@ -73,7 +78,7 @@ class MinmaxSearch:
         if ttv is not None:
             return ttv
 
-        value, move = float("inf"), None
+        value, move, val = float("inf"), None, 0
         next_moves = GomokuEval.generate_sorted_moves2(self.game)
         # TT best move first when available
         entry = self.tt.get(self.game.hash_key)
@@ -89,11 +94,15 @@ class MinmaxSearch:
                 self.game.make_move(next_move[0], next_move[1])
                 val = self.max_value(depth - 1, alpha, beta)
             finally:
+                if self.game.game_over:  # 直接结束，不需要搜索其他步骤，提速明显
+                    assert self.game.winner == 1, "last move is player, player win"
+                    self.game.undo_move()
+                    self.store_tt(
+                        self.game.hash_key, depth, val, alpha, beta, next_move
+                    )
+                    return val
                 self.game.undo_move()  # 确保抛出异常后也要执行undo_move
-            if self.game.game_over:  # 直接结束，不需要搜索其他步骤，提速明显
-                assert self.game.winner == 1, "last move is player, player win"
-                self.store_tt(self.game.hash_key, depth, val, alpha, beta, next_move)
-                return val
+
             if val < value:
                 value, move = val, next_move
             beta = min(beta, val)

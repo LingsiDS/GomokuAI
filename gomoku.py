@@ -44,6 +44,7 @@ class Gomoku:
             if self.check_win(row, col):
                 self.game_over = True
                 self.winner = self.current_player
+                return True
             # 即使赢了也要修改当前玩家，因为在下一次调用evaluate时，对手赢了得分才会变成负数，才能适配minmax搜索
             # 比如黑棋赢了，他继续递归时，他会在max_value的第一行检测到game_over，然后调用evaluate，
             # 这时current_player必须为白棋，才会使得黑棋的得分为负数，从而黑棋棋局的min_value选择这一最优走法，否则会选择其他无关紧要的走法

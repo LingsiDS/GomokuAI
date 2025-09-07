@@ -94,29 +94,29 @@ white_patterns = {
 
 
 scores = {
-    BoardPattern.FIVE: 8e9,
-    BoardPattern.OPEN_FOUR: 20000,
-    BoardPattern.BLOCKED_FOUR: 5000,
-    BoardPattern.OPEN_THREE: 3000,
-    BoardPattern.BLOCKED_THREE: 100,
+    BoardPattern.FIVE: 8e11,
+    BoardPattern.OPEN_FOUR: 1000000,  # 提高活四权重
+    BoardPattern.BLOCKED_FOUR: 50000,  # 提高冲四权重
+    BoardPattern.OPEN_THREE: 100000,
+    BoardPattern.BLOCKED_THREE: 1000,
     BoardPattern.OPEN_TWO: 300,
-    BoardPattern.DOUBLE_OPEN_THREE: 15000,  # 分数仅次于活四，优先活四
-    BoardPattern.DOUBLE_BLOCKED_FOUR: 20000,  # 基本必杀局
-    BoardPattern.FOUR_THREE: 25000,  # 四三杀
-    BoardPattern.DOUBLE_OPEN_FOUR: 50000,  # 双活四
+    BoardPattern.DOUBLE_OPEN_THREE: 150000,  # 分数仅次于活四，优先活四
+    BoardPattern.DOUBLE_BLOCKED_FOUR: 200000,  # 基本必杀局
+    BoardPattern.FOUR_THREE: 250000,  # 四三杀
+    BoardPattern.DOUBLE_OPEN_FOUR: 500000,  # 双活四
 }
 
 
 # 基础分数映射
 SCORE_MAP = {
-    "FIVE": 8e9,
-    "OPEN_FOUR": 20000,
-    "BLOCKED_FOUR": 5000,
-    "OPEN_THREE": 3000,
-    "BLOCKED_THREE": 100,
+    "FIVE": 8e11,
+    "OPEN_FOUR": 10000000,  # 提高活四权重
+    "BLOCKED_FOUR": 50000,  # 提高冲四权重
+    "OPEN_THREE": 100000,
+    "BLOCKED_THREE": 1000,
     "OPEN_TWO": 300,
-    "DOUBLE_OPEN_THREE": 15000,
-    "DOUBLE_OPEN_FOUR": 50000,
+    "DOUBLE_OPEN_THREE": 150000,
+    "DOUBLE_OPEN_FOUR": 500000,
 }
 
 # 黑棋大正则

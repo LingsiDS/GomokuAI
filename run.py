@@ -225,6 +225,7 @@ def load_snapshot(filename):
         game.history = [tuple(move) for move in data["history"]]
         game.game_over = data["game_over"]
         game.winner = data["winner"]
+        game.hash_key = data["hash_key"]
 
         if game.history:
             game.last_move = game.history[-1][:2]
@@ -239,7 +240,7 @@ def load_snapshot(filename):
 def main():
     global running
     game = Gomoku()
-    ai = MinmaxSearch(time_limit=6)
+    ai = MinmaxSearch(time_limit=8)
     game_mode = 0  # 0: 主菜单, 1: 双人对战, 2: AI对战, 3: 加载残局菜单
     mouse_pos = None
 
@@ -402,6 +403,7 @@ def main():
                                 "total_moves": len(game_copy.history),
                                 "ai_undone": game_mode == 2
                                 and game_copy.current_player == 2,  # 标记是否悔棋了AI
+                                "hash_key": game_copy.hash_key,
                             }
 
                             # 确保board_snapshots目录存在
