@@ -3,7 +3,7 @@ import sys
 import random
 import numpy as np
 from gomoku import Gomoku
-from alpha_beta_search import MinmaxSearch
+from alpha_beta_search import AlphaBetaSearch
 import threading
 import copy
 import json, datetime
@@ -240,7 +240,7 @@ def load_snapshot(filename):
 def main():
     global running
     game = Gomoku()
-    ai = MinmaxSearch(time_limit=8)
+    ai = AlphaBetaSearch(time_limit=8)
     game_mode = 0  # 0: 主菜单, 1: 双人对战, 2: AI对战, 3: 加载残局菜单
     mouse_pos = None
 
@@ -383,6 +383,7 @@ def main():
                             game_copy = copy.deepcopy(game)
 
                             # 如果是AI模式且当前轮到AI，需要悔棋AI的最后一步
+                            did_undo_ai_move = False
                             if (
                                 game_mode == 2
                                 and game_copy.current_player == 1
@@ -390,6 +391,7 @@ def main():
                             ):
                                 # 悔棋AI的最后一步
                                 game_copy.undo_move()
+                                did_undo_ai_move = True
                                 print("已悔棋AI的最后一步，准备保存棋局")
 
                             snapshot = {
@@ -401,8 +403,7 @@ def main():
                                 "winner": game_copy.winner,
                                 "save_time": datetime.datetime.now().isoformat(),
                                 "total_moves": len(game_copy.history),
-                                "ai_undone": game_mode == 2
-                                and game_copy.current_player == 2,  # 标记是否悔棋了AI
+                                "ai_undone": did_undo_ai_move,
                                 "hash_key": game_copy.hash_key,
                             }
 

@@ -192,7 +192,7 @@ class GomokuEvalOptimized:
                     opp_open_three += 1
                 if kind == "OPEN_FOUR":
                     opp_open_four += 1
-                score -= SCORE_MAP.get(kind, 0)
+                score -= SCORE_MAP.get(kind, 0) * 2.0
 
         # 额外处理双活三、双活四
         if own_open_three >= 2:
@@ -200,9 +200,9 @@ class GomokuEvalOptimized:
         if own_open_four >= 2:
             score += SCORE_MAP["DOUBLE_OPEN_FOUR"]
         if opp_open_three >= 2:
-            score -= SCORE_MAP["DOUBLE_OPEN_THREE"]
+            score -= SCORE_MAP["DOUBLE_OPEN_THREE"] * 2.0
         if opp_open_four >= 2:
-            score -= SCORE_MAP["DOUBLE_OPEN_FOUR"]
+            score -= SCORE_MAP["DOUBLE_OPEN_FOUR"] * 2.0
 
         return score
 
@@ -496,7 +496,7 @@ class GomokuEval:
             opp_pattern_str = [pattern2str(p) for p in opp_pattern]
             # print(f"own_pattern_str: {own_pattern_str}")
             # print(f"opp_pattern_str: {opp_pattern_str}")
-            score = own_score + opp_score
+            score = own_score + opp_score * 2.0
             moves.append((x, y, score, own_pattern_str, opp_pattern_str))
         moves.sort(key=lambda x: x[2], reverse=True)
         # for move in moves:
@@ -616,11 +616,12 @@ class GomokuEval:
             # 转成分数
             own_score = GomokuEval.calc_scores(own_pattern)
             opp_score = GomokuEval.calc_scores(opp_pattern)
+            score = own_score + opp_score * 2.0
             moves.append(
                 (
                     x,
                     y,
-                    own_score + opp_score,
+                    score,
                     [pattern2str(p) for p in own_pattern],
                     [pattern2str(p) for p in opp_pattern],
                 )

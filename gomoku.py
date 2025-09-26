@@ -38,32 +38,33 @@ class Gomoku:
         if self.is_valid_move(row, col):
             self.board[row][col] = self.current_player
             self.hash_key ^= self.zobrist.piece_key(row, col, self.current_player)
-            self.hash_key ^= self.zobrist.side_key
             self.last_move = (row, col)
-            self.history.append((row, col, self.current_player))  # 记录历史
+            self.history.append((row, col, self.current_player))
             if self.check_win(row, col):
                 self.game_over = True
                 self.winner = self.current_player
-                return True
-            # 即使赢了也要修改当前玩家，因为在下一次调用evaluate时，对手赢了得分才会变成负数，才能适配minmax搜索
-            # 比如黑棋赢了，他继续递归时，他会在max_value的第一行检测到game_over，然后调用evaluate，
-            # 这时current_player必须为白棋，才会使得黑棋的得分为负数，从而黑棋棋局的min_value选择这一最优走法，否则会选择其他无关紧要的走法
-            # TODO：看看是否能优化逻辑？直接在make_move后面检测是否game_over?
-            self.current_player = 3 - self.current_player
+            else:  # 只有在游戏没结束时才切换玩家
+                self.hash_key ^= self.zobrist.side_key
+                self.current_player = 3 - self.current_player
             return True
         return False
 
     def undo_move(self):
         if not self.history:
-            print("没有可撤销的步骤")
             return False
-        row, col, player = self.history.pop()
+
+        row, col, player_who_moved = self.history.pop()
+        was_game_over = self.game_over
         self.board[row][col] = 0
-        self.hash_key ^= self.zobrist.piece_key(row, col, player)
-        self.hash_key ^= self.zobrist.side_key
-        self.current_player = player
         self.game_over = False
         self.winner = None
+
+        self.current_player = player_who_moved
+        # 恢复哈希值，注意，只有在游戏没有结束的时候恢复
+        self.hash_key ^= self.zobrist.piece_key(row, col, player_who_moved)
+        if not was_game_over:
+            self.hash_key ^= self.zobrist.side_key
+
         if self.history:
             self.last_move = self.history[-1][:2]
         else:
